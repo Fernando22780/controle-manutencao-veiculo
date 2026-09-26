@@ -1,15 +1,17 @@
-# Controle de Manutenção de Veículo/Moto
+# Controle de Manutenção de Veículos
 
-Aplicativo acadêmico em React Native + Expo para registrar manutenções localmente, consultar a localização da oficina e fotografar o comprovante.
+Aplicativo em **React Native + Expo**, compatível com Android e iOS pelo Expo Go.
+
+Permite registrar manutenções, salvar a localização da oficina por GPS e anexar fotos dos comprovantes. Os dados ficam salvos localmente no aparelho.
 
 ## Tecnologias
 
-- React Native + Expo SDK 54
-- React Navigation com Bottom Tabs
-- `expo-local-authentication` para proteger o acesso
-- `@react-native-async-storage/async-storage` para persistência local
-- `expo-location` e `react-native-maps` para localização
-- `expo-camera` para fotografar e exibir o comprovante
+- React Native e Expo SDK 57
+- React Navigation
+- AsyncStorage
+- Biometria com `expo-local-authentication`
+- GPS com `expo-location`
+- Câmera com `expo-camera`
 
 ## Como executar
 
@@ -18,16 +20,30 @@ npm install
 npx expo start
 ```
 
-Abra o projeto no **Expo Go** usando o QR Code. Em um dispositivo sem biometria configurada, o aplicativo informa a indisponibilidade e permite continuar para facilitar os testes em simuladores e aparelhos sem cadastro biométrico.
+Depois, abra o projeto no **Expo Go** pelo QR Code.
 
-## Estrutura
+## Funcionalidades
+
+- Cadastro e login local
+- Acesso opcional por biometria
+- Bloqueio automático ao voltar para o app
+- Registro de serviço, data, veículo, localização e comprovante
+- Histórico de manutenções
+- Visualização e edição dos registros salvos
+- Perfil da conta e logout
+
+## Estrutura principal
 
 ```text
-controle-manutencao/
-├── App.js          # biometria, navegação e telas do aplicativo
-├── app.json        # configuração Expo, permissões e plugins
-├── index.js        # entrada do Expo
-├── package.json    # scripts e dependências
-└── README.md       # instruções
+App.js              # Navegação e sessão
+app.json            # Configuração do Expo e permissões
+index.js            # Entrada do aplicativo
+src/storage.js      # Dados locais
+src/theme.js        # Tema e helpers
+src/screens/        # Telas do aplicativo
+src/components/     # Componentes reutilizáveis
 ```
 
+## Observação
+
+Para testar GPS, câmera e biometria corretamente, use um dispositivo físico com o Expo Go. O comportamento pode ser limitado em emuladores ou simuladores.

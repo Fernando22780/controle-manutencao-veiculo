@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "Controle de Manutenção",
-    "slug": "controle-manutencao-veiculo",
-    "version": "1.0.0",
+    "name": "Controle de Manutenção de Veículos",
+    "slug": "controle-manutencao-veiculo-final",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/app-icon.png",
     "splash": {
       "backgroundColor": "#0f172a"
     },
@@ -17,7 +18,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0f172a"
+        "backgroundColor": "#0f172a",
+        "foregroundImage": "./assets/app-icon.png"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
