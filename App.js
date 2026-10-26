@@ -7,6 +7,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from './src/theme';
 import PrimaryButton from './src/components/PrimaryButton';
 import HomeScreen from './src/screens/HomeScreen';
@@ -17,9 +18,10 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import CenteredMessage from './src/components/CenteredMessage';
 import { clearSession, getActiveSession, getUser, saveSession } from './src/storage';
+import { trackPhotoPickerAppState } from './src/photoPickerState';
 
 const Tab = createBottomTabNavigator(); const Stack = createNativeStackNavigator();
-const tabs = { Início: '⌂', Manutenções: '✓', Comprovante: '▣', Perfil: '●' };
+const tabs = { Início: 'home-variant-outline', Manutenções: 'wrench-outline', Comprovantes: 'receipt-text-outline', Perfil: 'account-circle-outline' };
 
 export default function App() {
   const [checking, setChecking] = useState(true); const [authenticated, setAuthenticated] = useState(false); const [authMode, setAuthMode] = useState('login'); const [sessionExpired, setSessionExpired] = useState(false); const [user, setUser] = useState(null);
@@ -40,10 +42,11 @@ export default function App() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       const previousState = appState.current;
+      const returnedFromPhotoPicker = trackPhotoPickerAppState(nextState);
       if (nextState === 'background') backgroundedAt.current = Date.now();
       const cameFromRealBackground = previousState === 'background' && nextState === 'active';
       const stayedInBackground = backgroundedAt.current && Date.now() - backgroundedAt.current >= 1000;
-      if (cameFromRealBackground && stayedInBackground && authenticated && user?.biometricEnabled) setLocked(true);
+      if (!returnedFromPhotoPicker && cameFromRealBackground && stayedInBackground && authenticated && user?.biometricEnabled) setLocked(true);
       if (nextState === 'active') backgroundedAt.current = null;
       appState.current = nextState;
     });
@@ -91,6 +94,6 @@ function TabNavigator({ user, onLogout, onUserUpdate }) {
   const insets = useSafeAreaInsets();
   const HomeRoute = (props) => <HomeScreen {...props} user={user} />;
   const ProfileRoute = (props) => <ProfileScreen {...props} user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />;
-  return <Tab.Navigator screenOptions={({ route }) => ({ headerShown: false, tabBarActiveTintColor: COLORS.blue, tabBarInactiveTintColor: COLORS.muted, tabBarLabelStyle: styles.tabLabel, tabBarIcon: ({ color }) => <Text style={[styles.tabIcon, { color }]}>{tabs[route.name]}</Text>, tabBarStyle: [styles.tabBar, { height: 70 + insets.bottom, paddingBottom: insets.bottom + 8 }], tabBarHideOnKeyboard: true })}><Tab.Screen name="Início" component={HomeRoute} /><Tab.Screen name="Manutenções" component={MaintenanceScreen} /><Tab.Screen name="Comprovante" component={CameraScreen} /><Tab.Screen name="Perfil" component={ProfileRoute} /></Tab.Navigator>;
+  return <Tab.Navigator screenOptions={({ route }) => ({ headerShown: false, tabBarActiveTintColor: COLORS.green, tabBarInactiveTintColor: COLORS.muted, tabBarLabelStyle: styles.tabLabel, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name={tabs[route.name]} color={color} size={size + 2} />, tabBarStyle: [styles.tabBar, { height: 76 + insets.bottom, paddingTop: 8, paddingBottom: insets.bottom + 7 }], tabBarHideOnKeyboard: true })}><Tab.Screen name="Início" component={HomeRoute} /><Tab.Screen name="Manutenções" component={MaintenanceScreen} /><Tab.Screen name="Comprovantes" component={CameraScreen} /><Tab.Screen name="Perfil" component={ProfileRoute} /></Tab.Navigator>;
 }
-const styles = StyleSheet.create({ appRoot: { flex: 1 }, lockOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 }, tabBar: { borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.card, elevation: 10, shadowColor: COLORS.navy, shadowOpacity: 0.08, shadowRadius: 8 }, tabLabel: { fontSize: 10, fontWeight: '800' }, tabIcon: { fontSize: 19, fontWeight: '800' }, lockScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: COLORS.navyDeep }, lockIcon: { width: 68, height: 68, borderRadius: 20, backgroundColor: COLORS.blue, alignItems: 'center', justifyContent: 'center', marginBottom: 18 }, lockIconText: { color: '#fff', fontSize: 30 }, lockTitle: { color: '#fff', fontSize: 22, fontWeight: '900' }, lockText: { color: '#B8CBD2', textAlign: 'center', lineHeight: 21, marginTop: 8, marginBottom: 20 }, lockButton: { width: '100%' }, lockLogout: { color: '#B8CBD2', fontSize: 13, fontWeight: '700', marginTop: 14, textDecorationLine: 'underline' } });
+const styles = StyleSheet.create({ appRoot: { flex: 1 }, lockOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 }, tabBar: { borderTopWidth: 0, backgroundColor: COLORS.card, elevation: 14, shadowColor: COLORS.navy, shadowOpacity: 0.1, shadowRadius: 14, shadowOffset: { width: 0, height: -4 } }, tabLabel: { fontSize: 10, fontWeight: '800' }, tabIcon: { fontSize: 19, fontWeight: '800' }, lockScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: COLORS.navyDeep }, lockIcon: { width: 68, height: 68, borderRadius: 20, backgroundColor: COLORS.blue, alignItems: 'center', justifyContent: 'center', marginBottom: 18 }, lockIconText: { color: '#fff', fontSize: 30 }, lockTitle: { color: '#fff', fontSize: 22, fontWeight: '900' }, lockText: { color: '#B8CBD2', textAlign: 'center', lineHeight: 21, marginTop: 8, marginBottom: 20 }, lockButton: { width: '100%' }, lockLogout: { color: '#B8CBD2', fontSize: 13, fontWeight: '700', marginTop: 14, textDecorationLine: 'underline' } });
