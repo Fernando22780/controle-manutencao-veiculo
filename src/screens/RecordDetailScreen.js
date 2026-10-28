@@ -5,11 +5,12 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOW, getRecordStatus, getRecordStatusText } from '../theme';
-import { updateRecord } from '../storage';
+import { removeRecord, updateRecord } from '../storage';
 import PrimaryButton from '../components/PrimaryButton';
+import EditRecordModal from '../components/EditRecordModal';
 import { describeNext, formatKm, formatMoney } from '../maintenanceUtils';
 
-export default function RecordDetailScreen({ route }) {
+export default function RecordDetailScreen({ route, navigation }) {
   const [record, setRecord] = useState(route.params.record);
   const [modal, setModal] = useState(null);
   const status = getRecordStatus(record);
@@ -24,6 +25,12 @@ export default function RecordDetailScreen({ route }) {
     await updateRecord(record.id, changes);
     setRecord(updated);
     setModal(null);
+  }
+  function confirmDelete() {
+    Alert.alert('Excluir manutenção?', `“${record.description}” de ${record.date} será apagada, com o comprovante e a localização. Essa ação não pode ser desfeita.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => { await removeRecord(record.id); navigation.goBack(); } },
+    ]);
   }
   async function openInMaps() {
     if (!record.location) return;
@@ -45,6 +52,10 @@ export default function RecordDetailScreen({ route }) {
         <View style={styles.vehicleCopy}><Text style={styles.cardEyebrow}>VEÍCULO</Text><Text style={styles.vehicleName}>{vehicleName}</Text><Text style={styles.vehiclePlate}>{vehiclePlate || 'Placa não cadastrada'} · {vehicleYear ? `Ano ${vehicleYear}` : 'Ano não informado'}</Text></View>
         <MaterialCommunityIcons name="check-decagram-outline" size={21} color={COLORS.green} />
       </View>
+
+      <Pressable onPress={() => setModal('edit')} style={({ pressed }) => [styles.editButton, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel="Editar dados do registro">
+        <MaterialCommunityIcons name="pencil-outline" size={19} color={COLORS.green} /><Text style={styles.editButtonText}>Editar serviço, data, km, valor e lembrete</Text><MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.muted} />
+      </Pressable>
 
       {hasKm || hasCost || record.reminder ? <View style={styles.infoCard}>
         {hasKm || hasCost ? <View style={styles.infoRow}>
@@ -71,7 +82,11 @@ export default function RecordDetailScreen({ route }) {
         <PrimaryButton title={record.location ? 'Atualizar localização' : 'Adicionar localização'} variant="secondary" onPress={() => setModal('location')} />
       </View>
       <View style={styles.completionNote}><MaterialCommunityIcons name={status.label === 'Completo' ? 'check-circle-outline' : 'progress-clock'} size={19} color={status.color} /><Text style={[styles.completionText, { color: status.color }]}>{getRecordStatusText(record)}</Text></View>
+      <Pressable onPress={confirmDelete} style={({ pressed }) => [styles.deleteRecord, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel="Excluir esta manutenção">
+        <MaterialCommunityIcons name="trash-can-outline" size={20} color={COLORS.red} /><Text style={styles.deleteRecordText}>Excluir esta manutenção</Text>
+      </Pressable>
     </ScrollView>
+    <EditRecordModal visible={modal === 'edit'} record={record} onClose={() => setModal(null)} onSaved={(changes) => saveChanges(changes)} />
     <PhotoModal visible={modal === 'photo'} onClose={() => setModal(null)} onSaved={(uri) => saveChanges({ photo: uri })} />
     <LocationModal visible={modal === 'location'} onClose={() => setModal(null)} onSaved={(coords) => saveChanges({ location: coords })} />
   </SafeAreaView>;
@@ -99,6 +114,10 @@ function LocationModal({ visible, onClose, onSaved }) {
 function ModalHeader({ title, onClose }) { return <View style={styles.modalHeader}><Text style={styles.modalTitle}>{title}</Text><Pressable onPress={onClose} style={styles.close}><MaterialCommunityIcons name="close" size={21} color={COLORS.text} /></Pressable></View>; }
 
 const styles = StyleSheet.create({
+  deleteRecord: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FDECEC', borderRadius: 16, paddingVertical: 14, marginTop: 18, marginBottom: 8 },
+  deleteRecordText: { color: COLORS.red, fontSize: 14, fontWeight: '900' },
+  editButton: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 14, marginTop: 14 },
+  editButtonText: { flex: 1, color: COLORS.green, fontSize: 13, fontWeight: '900' },
   infoCard: { backgroundColor: COLORS.card, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginTop: 14, ...SHADOW },
   infoRow: { flexDirection: 'row', alignItems: 'stretch' },
   infoItem: { flex: 1, alignItems: 'center', gap: 4 },

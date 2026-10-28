@@ -8,7 +8,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -22,6 +21,7 @@ import { COLORS, RADIUS, SHADOW, getRecordStatus, getRecordStatusText } from '..
 import PrimaryButton from '../components/PrimaryButton';
 import CenteredMessage from '../components/CenteredMessage';
 import CalendarPicker from '../components/CalendarPicker';
+import { Chip, ReminderCard } from '../components/ReminderFields';
 import {
   addRecord,
   clearStagingLocation,
@@ -48,7 +48,6 @@ import {
   formatKmInput,
   formatMoney,
   getCurrentKm,
-  onlyDigits,
   parseKm,
   parseMoney,
   sanitizeMoneyInput,
@@ -97,7 +96,9 @@ export default function MaintenanceScreen({ navigation }) {
     setStagedLocation(location);
     setStagedPhoto(photo);
     setVehicles(savedVehicles);
-    const activeVehicleId = draft?.vehicleId || selectedId || savedVehicles[0]?.id || null;
+    const draftVehicleOk = draft?.vehicleId && savedVehicles.some((vehicle) => vehicle.id === draft.vehicleId);
+    const activeVehicleId = (draftVehicleOk ? draft.vehicleId : null) || (savedVehicles.some((vehicle) => vehicle.id === selectedId) ? selectedId : null) || savedVehicles[0]?.id || null;
+    setHistoryVehicle((current) => current === 'all' || savedVehicles.some((vehicle) => vehicle.id === current) ? current : 'all');
     setVehicleId(activeVehicleId);
     if (!historyFilterReady.current) {
       historyFilterReady.current = true;
@@ -229,10 +230,10 @@ export default function MaintenanceScreen({ navigation }) {
     Alert.alert('Salvo', savedReminder ? `Manutenção adicionada. Próximo aviso: ${describeNext(savedReminder)}.` : 'Manutenção adicionada ao histórico.');
   }
 
-  function handleRemoveRecord(id) {
-    Alert.alert('Excluir manutenção', 'Deseja excluir este registro?', [
+  function handleRemoveRecord(item) {
+    Alert.alert('Excluir manutenção?', `“${item.description}” de ${item.date}${item.vehicleName ? ` (${item.vehicleName})` : ''} será apagada. Essa ação não pode ser desfeita.`, [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: async () => setRecords(await removeRecord(id)) },
+      { text: 'Excluir', style: 'destructive', onPress: async () => setRecords(await removeRecord(item.id)) },
     ]);
   }
 
@@ -292,22 +293,7 @@ export default function MaintenanceScreen({ navigation }) {
                 </View>
               </View>
 
-              <View style={[styles.reminderCard, reminderOn && styles.reminderCardOn]}>
-                <View style={styles.reminderHead}>
-                  <View style={styles.reminderIcon}><MaterialCommunityIcons name="bell-ring-outline" size={20} color={COLORS.green} /></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reminderTitle}>Lembrar próxima manutenção</Text>
-                    <Text style={styles.reminderSub}>{reminderOn ? 'Escolha em quanto tempo ou km.' : 'Receba o aviso na tela Início.'}</Text>
-                  </View>
-                  <Switch value={reminderOn} onValueChange={toggleReminder} trackColor={{ false: COLORS.border, true: COLORS.green }} thumbColor="#fff" />
-                </View>
-                {reminderOn ? <>
-                  <IntervalChips label="Por quilometragem" unit="km" options={[5000, 10000, 15000, 20000]} value={kmInterval} onChange={setKmInterval} />
-                  <IntervalChips label="Por tempo" unit="meses" options={[3, 6, 12]} value={monthsInterval} onChange={setMonthsInterval} />
-                  {needsKmForReminder ? <Text style={styles.reminderWarn}>Preencha o km atual acima para calcular o aviso por quilometragem.</Text> : null}
-                  {reminderPreview && describeNext(reminderPreview) ? <View style={styles.reminderPreview}><MaterialCommunityIcons name="calendar-check-outline" size={16} color={COLORS.green} /><Text style={styles.reminderPreviewText}>Próximo aviso: {describeNext(reminderPreview)}</Text></View> : null}
-                </> : null}
-              </View>
+              <ReminderCard on={reminderOn} onToggle={toggleReminder} kmInterval={kmInterval} onKmIntervalChange={setKmInterval} monthsInterval={monthsInterval} onMonthsIntervalChange={setMonthsInterval} preview={reminderPreview} needsKm={needsKmForReminder} />
 
               <Text style={styles.attachTitle}>Adicionar ao registro (obrigatório)</Text>
               <View style={styles.attachRow}>
@@ -369,8 +355,8 @@ export default function MaintenanceScreen({ navigation }) {
               {item.km !== null && item.km !== undefined || item.cost !== null && item.cost !== undefined ? <Text style={styles.recordExtra}>{[item.km !== null && item.km !== undefined ? `${formatKm(item.km)} km` : null, item.cost !== null && item.cost !== undefined ? formatMoney(item.cost) : null].filter(Boolean).join(' · ')}</Text> : null}
               <Text style={[styles.recordStatus, { color: getRecordStatus(item).color }]}>{getRecordStatusText(item)}</Text>
             </View>
-            <Pressable onPress={() => handleRemoveRecord(item.id)} style={styles.deleteButton} accessibilityLabel="Excluir registro">
-              <Text style={styles.deleteText}>×</Text>
+            <Pressable onPress={() => handleRemoveRecord(item)} style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.6 }]} hitSlop={6} accessibilityRole="button" accessibilityLabel="Excluir manutenção">
+              <MaterialCommunityIcons name="trash-can-outline" size={20} color={COLORS.red} />
             </Pressable>
           </Pressable>
         )}
@@ -385,26 +371,6 @@ export default function MaintenanceScreen({ navigation }) {
 
 function Field({ label, ...props }) {
   return <View><Text style={styles.fieldLabel}>{label}</Text><TextInput style={styles.input} placeholderTextColor={COLORS.muted} {...props} /></View>;
-}
-
-function Chip({ label, active, onPress }) {
-  return <Pressable onPress={onPress} style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && { opacity: 0.75 }]} accessibilityRole="button"><Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text></Pressable>;
-}
-
-function IntervalChips({ label, unit, options, value, onChange }) {
-  const [customMode, setCustomMode] = useState(false);
-  const numeric = value ? Number(value) : null;
-  const isCustom = Boolean(value) && !options.includes(numeric);
-  const showCustom = customMode || isCustom;
-  return <View style={styles.intervalBlock}>
-    <Text style={styles.intervalLabel}>{label}</Text>
-    <View style={styles.intervalRow}>
-      {options.map((option) => <Chip key={option} label={unit === 'km' ? `${formatKm(option)} km` : `${option} meses`} active={!showCustom && numeric === option} onPress={() => { setCustomMode(false); onChange(String(option)); }} />)}
-      <Chip label="Outro" active={showCustom} onPress={() => { setCustomMode(true); if (options.includes(numeric)) onChange(''); }} />
-      <Chip label="Nenhum" active={!showCustom && !value} onPress={() => { setCustomMode(false); onChange(''); }} />
-    </View>
-    {showCustom ? <TextInput style={[styles.input, { marginTop: 8 }]} value={value} onChangeText={(text) => onChange(onlyDigits(text).slice(0, 6))} keyboardType="number-pad" placeholder={unit === 'km' ? 'Quantos km? Ex.: 8000' : 'Quantos meses? Ex.: 4'} placeholderTextColor={COLORS.muted} /> : null}
-  </View>;
 }
 
 function VehicleSelectModal({ visible, vehicles, selectedId, onClose, onSelect }) {
@@ -612,7 +578,7 @@ const styles = StyleSheet.create({
   recordTitle: { color: COLORS.text, fontSize: 15, fontWeight: '900' },
   recordMeta: { color: COLORS.muted, fontSize: 11, marginTop: 4 },
   recordStatus: { fontSize: 11, fontWeight: '800', marginTop: 5 },
-  deleteButton: { padding: 8 },
+  deleteButton: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#FDECEC', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
   deleteText: { color: COLORS.red, fontSize: 23 },
   modalScreen: { flex: 1, backgroundColor: COLORS.bg, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },

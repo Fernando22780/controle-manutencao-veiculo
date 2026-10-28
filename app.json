@@ -8,7 +8,7 @@
     "newArchEnabled": true,
     "icon": "./assets/app-icon.png",
     "splash": {
-      "backgroundColor": "#0f172a"
+      "backgroundColor": "#071F1B"
     },
     "ios": {
       "supportsTablet": true,
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0f172a",
+        "backgroundColor": "#071F1B",
         "foregroundImage": "./assets/app-icon.png"
       },
       "permissions": [
@@ -38,6 +38,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Permita o acesso à localização para registrar a oficina."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita o acesso às fotos para escolher uma foto de perfil.",
+          "cameraPermission": "Permita o acesso à câmara para tirar uma foto de perfil."
         }
       ],
       "expo-local-authentication",
