@@ -9,6 +9,11 @@ export function parseDateBR(value) {
   const valid = d.getFullYear() === Number(m[3]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[1]);
   return valid ? d : null;
 }
+// Data válida no formato DD/MM/AAAA, entre 1900 e o ano atual (mesma regra do cadastro).
+export function isValidDateBR(value) {
+  const d = parseDateBR(value);
+  return Boolean(d) && d.getFullYear() >= 1900 && d.getFullYear() <= new Date().getFullYear();
+}
 export function formatDateBR(date) {
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 }
@@ -200,4 +205,43 @@ export function filterRecords(records, vehicles, { vehicleId = 'all', query = ''
     const haystack = normalizeService([record.description, record.vehicleName, record.vehicle, record.vehiclePlate, record.date].filter(Boolean).join(' '));
     return tokens.every((token) => haystack.includes(token));
   });
+}
+
+// ---------- Gráficos de gastos ----------
+const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+// Gasto de cada um dos últimos `count` meses (o mês atual é o último).
+export function monthlyCosts(records, today = new Date(), count = 6) {
+  const months = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const ref = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    months.push({ year: ref.getFullYear(), month: ref.getMonth(), label: MONTH_LABELS[ref.getMonth()], total: 0, current: i === 0 });
+  }
+  (records || []).forEach((record) => {
+    const d = parseDateBR(record.date);
+    const cost = Number(record.cost) || 0;
+    if (!d || !cost) return;
+    const slot = months.find((m) => m.year === d.getFullYear() && m.month === d.getMonth());
+    if (slot) slot.total += cost;
+  });
+  return months;
+}
+// Serviços em que mais se gastou (agrupa "Troca de óleo" e "troca de oleo" como o mesmo).
+export function costByService(records, limit = 3) {
+  const groups = new Map();
+  (records || []).forEach((record) => {
+    const cost = Number(record.cost) || 0;
+    const key = normalizeService(record.description);
+    if (!cost || !key) return;
+    const group = groups.get(key) || { label: String(record.description).trim(), total: 0, count: 0 };
+    group.total += cost;
+    group.count += 1;
+    groups.set(key, group);
+  });
+  return [...groups.values()].sort((a, b) => b.total - a.total).slice(0, limit);
+}
+// 1800 -> "1,8 mil" | 480 -> "480" (cabe em cima da barra do gráfico)
+export function formatMoneyShort(value) {
+  const v = Number(value) || 0;
+  if (v >= 1000) return `${(v / 1000).toFixed(1).replace('.', ',').replace(',0', '')} mil`;
+  return String(Math.round(v));
 }

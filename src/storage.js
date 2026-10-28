@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { belongsToVehicle } from './maintenanceUtils';
 
 const RECORDS_KEY = '@controle_manutencao_registros';
 const VEHICLES_KEY = '@controle_manutencao_veiculos';
@@ -77,10 +78,15 @@ export async function setVehicleKm(id, km) {
   await saveVehicles(updated);
   return updated.find((vehicle) => vehicle.id === id);
 }
-export async function removeVehicle(id) {
-  const records = await getRecords();
-  if (records.some((record) => record.vehicleId === id)) return { ok: false, reason: 'linked-records' };
+// Remove o veículo. Se ele tiver manutenções, só apaga com { withRecords: true } (apaga as manutenções dele junto).
+export async function removeVehicle(id, { withRecords = false } = {}) {
   const vehicles = await getVehicles();
+  const target = vehicles.find((vehicle) => vehicle.id === id);
+  if (!target) return { ok: false, reason: 'not-found' };
+  const records = await getRecords();
+  const linked = records.filter((record) => belongsToVehicle(record, target));
+  if (linked.length && !withRecords) return { ok: false, reason: 'linked-records', count: linked.length };
+  if (linked.length) await saveRecords(records.filter((record) => !belongsToVehicle(record, target)));
   await saveVehicles(vehicles.filter((vehicle) => vehicle.id !== id));
   const selectedId = await AsyncStorage.getItem(SELECTED_VEHICLE_KEY);
   if (selectedId === id) {
@@ -88,7 +94,7 @@ export async function removeVehicle(id) {
     if (replacement) await AsyncStorage.setItem(SELECTED_VEHICLE_KEY, replacement.id);
     else await AsyncStorage.removeItem(SELECTED_VEHICLE_KEY);
   }
-  return { ok: true };
+  return { ok: true, removedRecords: linked.length };
 }
 
 export async function setStagingLocation(coords) { await AsyncStorage.setItem(STAGING_LOCATION_KEY, JSON.stringify(coords)); }

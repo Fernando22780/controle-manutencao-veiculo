@@ -5,8 +5,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOW, getCompletionCount, getGreeting, getPendingCount, getRecordStatus, getRecordStatusText } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
-import { addVehicle, getRecords, getSelectedVehicleId, getVehicles, setSelectedVehicleId, setVehicleKm, updateVehicle } from '../storage';
-import { formatKm, formatKmInput, formatMoney, getCurrentKm, getUpcoming, parseKm, sumCost, sumCostMonth } from '../maintenanceUtils';
+import { addVehicle, getRecords, getSelectedVehicleId, getVehicles, removeVehicle, setSelectedVehicleId, setVehicleKm, updateVehicle } from '../storage';
+import { belongsToVehicle } from '../maintenanceUtils';
+import { costByService, formatKm, formatKmInput, formatMoney, getCurrentKm, getUpcoming, monthlyCosts, parseKm, sumCost, sumCostMonth } from '../maintenanceUtils';
+import SpendingChart from '../components/SpendingChart';
 import { shareVehicleReport } from '../report';
 
 export default function HomeScreen({ navigation, user }) {
@@ -41,6 +43,8 @@ export default function HomeScreen({ navigation, user }) {
   const upcoming = useMemo(() => getUpcoming(vehicleRecords, currentKm), [vehicleRecords, currentKm]);
   const hasCost = vehicleRecords.some((record) => record.cost !== null && record.cost !== undefined);
   const totalCost = sumCost(vehicleRecords);
+  const chartMonths = useMemo(() => monthlyCosts(vehicleRecords), [vehicleRecords]);
+  const chartServices = useMemo(() => costByService(vehicleRecords), [vehicleRecords]);
   const monthCost = sumCostMonth(vehicleRecords);
 
   async function chooseVehicle(vehicle) { setSelectedId(vehicle.id); await setSelectedVehicleId(vehicle.id); }
@@ -55,6 +59,23 @@ export default function HomeScreen({ navigation, user }) {
     await setSelectedVehicleId(saved.id);
     await load();
     return true;
+  }
+  function handleDeleteVehicle() {
+    const target = editingVehicle;
+    if (!target) return;
+    const count = records.filter((record) => belongsToVehicle(record, target)).length;
+    const detail = count ? `Isso também apaga ${count} ${count === 1 ? 'manutenção' : 'manutenções'} deste veículo, com comprovantes e localizações.` : 'Ele não tem manutenções registradas.';
+    Alert.alert(`Excluir ${target.name}?`, `${detail} Essa ação não pode ser desfeita.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => {
+        try {
+          await removeVehicle(target.id, { withRecords: true });
+          setVehicleModal(false);
+          setEditingVehicle(null);
+          await load();
+        } catch (error) { console.warn('Falha ao excluir o veículo:', error); Alert.alert('Não foi possível excluir', 'Tente novamente.'); }
+      } },
+    ]);
   }
   function openKmModal() { setKmInput(currentKm !== null ? formatKm(currentKm) : ''); setKmModal(true); }
   async function saveKm() {
@@ -89,8 +110,8 @@ export default function HomeScreen({ navigation, user }) {
         <View style={styles.vehicleHero}>
           <View style={styles.vehicleCopy}>
             <Text style={styles.vehicleEyebrow}>VEÍCULO SELECIONADO</Text>
-            <Text style={styles.vehicleName} numberOfLines={2}>{selectedVehicle.name}</Text>
-            <Pressable onPress={() => openVehicleForm(selectedVehicle)} style={styles.platePill} accessibilityRole="button" accessibilityLabel="Editar veículo e cadastrar placa"><MaterialCommunityIcons name="card-account-details-outline" size={15} color={COLORS.text} /><Text style={styles.plateText}>{selectedVehicle.plate || 'Placa não cadastrada'}{selectedVehicle.year ? ` · ${selectedVehicle.year}` : ''}</Text><MaterialCommunityIcons name="pencil-outline" size={13} color={COLORS.green} /></Pressable>
+            <Text style={styles.vehicleName} numberOfLines={2}>{selectedVehicle.name}{selectedVehicle.year ? <Text style={styles.vehicleYear}>{`  ${selectedVehicle.year}`}</Text> : null}</Text>
+            <Pressable onPress={() => openVehicleForm(selectedVehicle)} style={styles.platePill} accessibilityRole="button" accessibilityLabel="Editar veículo e cadastrar placa"><MaterialCommunityIcons name="card-account-details-outline" size={15} color={COLORS.text} /><Text style={styles.plateText} numberOfLines={1}>{selectedVehicle.plate || 'Placa não cadastrada'}</Text><MaterialCommunityIcons name="pencil-outline" size={13} color={COLORS.green} /></Pressable>
           </View>
           <Image source={require('../../assets/garage-car-universal.png')} style={styles.carArtwork} resizeMode="contain" accessibilityLabel="Ilustração de um carro" />
           <View style={[styles.vehicleStatus, { backgroundColor: allRecordsComplete ? '#E9F5EE' : hasPendingRecords ? COLORS.paleAmber : '#EEF1EF' }]}><MaterialCommunityIcons name={allRecordsComplete ? 'shield-check' : hasPendingRecords ? 'alert-circle-outline' : 'information-outline'} size={15} color={allRecordsComplete ? COLORS.green : hasPendingRecords ? COLORS.amber : COLORS.muted} /><Text style={[styles.vehicleStatusText, { color: allRecordsComplete ? COLORS.green : hasPendingRecords ? COLORS.amber : COLORS.muted }]}>{allRecordsComplete ? 'Tudo em dia' : hasPendingRecords ? 'Há pendências' : 'Pronto para começar'}</Text></View>
@@ -115,6 +136,8 @@ export default function HomeScreen({ navigation, user }) {
 
         <View style={styles.sectionRow}><View style={{ flex: 1 }}><Text style={styles.sectionTitle}>Próximas manutenções</Text><Text style={styles.sectionHint}>{upcoming.length ? 'Calculado a partir dos seus registros' : 'Nenhum lembrete ativo'}</Text></View><MaterialCommunityIcons name="bell-ring-outline" size={23} color={COLORS.green} /></View>
         {upcoming.length ? upcoming.map((item) => <UpcomingCard key={item.record.id} item={item} onPress={() => openRecord(item.record)} />) : <View style={styles.emptyActivity}><MaterialCommunityIcons name="bell-outline" size={28} color={COLORS.green} /><Text style={styles.emptyActivityTitle}>Sem lembretes por enquanto</Text><Text style={styles.emptyActivityText}>Ao registrar um serviço, ative “Lembrar próxima manutenção” para acompanhar o prazo aqui.</Text></View>}
+
+        {hasCost ? <View style={{ marginTop: 6 }}><SpendingChart months={chartMonths} services={chartServices} /></View> : null}
       </> : null}
 
       <View style={styles.sectionRow}><View><Text style={styles.sectionTitle}>Atividades recentes</Text><Text style={styles.sectionHint}>{selectedVehicle ? selectedVehicle.name : 'Selecione um veículo para ver o histórico'}</Text></View><MaterialCommunityIcons name="history" size={23} color={COLORS.green} /></View>
@@ -143,7 +166,7 @@ export default function HomeScreen({ navigation, user }) {
         <Pressable onPress={() => setKmModal(false)} style={styles.cancelButton}><Text style={styles.cancelText}>Cancelar</Text></Pressable>
       </View></View></KeyboardAvoidingView></View>
     </Modal>
-    <VehicleFormModal visible={vehicleModal} vehicle={editingVehicle} onClose={closeVehicleForm} onSave={handleSaveVehicle} />
+    <VehicleFormModal visible={vehicleModal} vehicle={editingVehicle} onClose={closeVehicleForm} onSave={handleSaveVehicle} onDelete={handleDeleteVehicle} />
   </SafeAreaView>;
 }
 
@@ -167,7 +190,7 @@ function UpcomingCard({ item, onPress }) {
 
 function HeroStat({ value, label, icon }) { return <View style={styles.heroStat}><MaterialCommunityIcons name={icon} size={17} color={COLORS.mint} /><Text style={styles.heroStatValue}>{value}</Text><Text style={styles.heroStatLabel}>{label}</Text></View>; }
 
-function VehicleFormModal({ visible, vehicle, onClose, onSave }) {
+function VehicleFormModal({ visible, vehicle, onClose, onSave, onDelete }) {
   const [name, setName] = useState('');
   const [plate, setPlate] = useState('');
   const [year, setYear] = useState('');
@@ -203,11 +226,15 @@ function VehicleFormModal({ visible, vehicle, onClose, onSave }) {
       <View style={styles.modalHint}><MaterialCommunityIcons name="information-outline" size={16} color={COLORS.green} /><Text style={styles.modalHintText}>Placa e ano são opcionais e ficam salvos com o veículo. Não precisa digitá-los em cada manutenção.</Text></View>
       <PrimaryButton title={saving ? (vehicle ? 'Atualizando…' : 'Salvando…') : vehicle ? 'Salvar alterações' : 'Guardar na garagem'} onPress={submit} disabled={saving} />
       <Pressable onPress={resetAndClose} disabled={saving} style={styles.cancelButton}><Text style={styles.cancelText}>Cancelar</Text></Pressable>
+      {vehicle ? <Pressable onPress={onDelete} disabled={saving} style={styles.deleteVehicle} accessibilityRole="button" accessibilityLabel="Excluir veículo"><MaterialCommunityIcons name="trash-can-outline" size={18} color={COLORS.red} /><Text style={styles.deleteVehicleText}>Excluir veículo</Text></Pressable> : null}
     </View></ScrollView></KeyboardAvoidingView></View>
   </Modal>;
 }
 
 const styles = StyleSheet.create({
+  deleteVehicle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 2, borderTopWidth: 1, borderTopColor: COLORS.border },
+  deleteVehicleText: { color: COLORS.red, fontSize: 13, fontWeight: '900' },
+  vehicleYear: { color: COLORS.mint, fontSize: 15, fontWeight: '800' },
   summaryCard: { flexDirection: 'row', alignItems: 'stretch', backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 6, marginTop: 4, ...SHADOW },
   summaryItem: { flex: 1, alignItems: 'center', gap: 4, paddingHorizontal: 4 },
   summaryValue: { color: COLORS.text, fontSize: 15, fontWeight: '900', maxWidth: '100%' },
