@@ -9,6 +9,7 @@ import PrimaryButton from '../components/PrimaryButton';
 import PhotoEditor from '../components/PhotoEditor';
 import { setBiometricEnabled, updatePassword, updateUser } from '../storage';
 import { beginPhotoPickerActivity, endPhotoPickerActivity } from '../photoPickerState';
+import { scheduleTestNotification } from '../notifications';
 
 export default function ProfileScreen({ user, onLogout, onUserUpdate }) {
   const [name, setName] = useState(user?.name || '');
@@ -131,6 +132,13 @@ export default function ProfileScreen({ user, onLogout, onUserUpdate }) {
     if (result.success) { const updated = await setBiometricEnabled(true); setBiometricBusy(false); if (updated) onUserUpdate?.(updated); }
     else { setBiometricBusy(false); Alert.alert('Não foi possível confirmar', 'Tente novamente.'); }
   }
+  async function testNotification() {
+    const result = await scheduleTestNotification();
+    if (result.ok) Alert.alert('Teste agendado', 'Aguarde 10s, a notificação chega em breve.');
+    else if (result.reason === 'web') Alert.alert('Teste no celular', 'Abra o projeto no Expo Go em um Android ou iPhone para testar notificações.');
+    else if (result.reason === 'permission') Alert.alert('Permissão necessária', 'Permita notificações nas configurações do celular e toque neste botão novamente.');
+    else Alert.alert('Não foi possível testar', 'O Expo Go não conseguiu agendar a notificação. Feche o Expo Go, abra novamente e tente outra vez.');
+  }
 
   return <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
     <PhotoEditor visible={Boolean(pendingPhotoUri)} uri={pendingPhotoUri} saving={photoSaving} onCancel={() => { if (!photoSaving) setPendingPhotoUri(null); }} onConfirm={confirmPhoto} />
@@ -166,10 +174,12 @@ export default function ProfileScreen({ user, onLogout, onUserUpdate }) {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Biometria</Text>
           {biometricHardware && biometricEnrolled ? <>
-            <View style={styles.bioRow}><View style={{ flex: 1 }}><Text style={styles.bioTitle}>{biometricOn ? 'Biometria ativada' : 'Biometria desativada'}</Text><Text style={styles.bioText}>{biometricOn ? 'Você pode entrar com digital/rosto e o app bloqueia ao voltar do segundo plano.' : 'Ative para entrar mais rápido, sem digitar a senha toda vez.'}</Text></View><View style={[styles.bioDot, { backgroundColor: biometricOn ? COLORS.green : COLORS.border }]} /></View>
+            <View style={styles.bioRow}><View style={{ flex: 1 }}><Text style={styles.bioTitle}>{biometricOn ? 'Biometria ativada' : 'Biometria desativada'}</Text><Text style={styles.bioText}>{biometricOn ? 'Você pode entrar com a digital e o app bloqueia ao voltar do segundo plano.' : 'Ative para entrar mais rápido, sem digitar a senha toda vez.'}</Text></View><View style={[styles.bioDot, { backgroundColor: biometricOn ? COLORS.green : COLORS.border }]} /></View>
             <PrimaryButton title={biometricBusy ? 'Aguarde...' : biometricOn ? 'Desativar biometria' : 'Ativar biometria'} variant={biometricOn ? 'secondary' : 'primary'} onPress={toggleBiometric} disabled={biometricBusy} />
-          </> : <Text style={styles.bioText}>{biometricHardware ? 'Cadastre uma digital ou rosto nas configurações do aparelho para poder ativar aqui.' : 'Este aparelho não informou suporte à biometria.'}</Text>}
+          </> : <Text style={styles.bioText}>{biometricHardware ? 'Cadastre uma digital nas configurações do aparelho para poder ativar aqui.' : 'Este aparelho não informou suporte à biometria.'}</Text>}
         </View>
+
+        <View style={styles.card}><View style={styles.passwordHeading}><MaterialCommunityIcons name="bell-ring-outline" size={22} color={COLORS.green} /><Text style={styles.sectionTitle}>Notificações</Text></View><Text style={styles.passwordHint}>Use este botão para confirmar se o celular está autorizado a receber avisos do aplicativo.</Text><PrimaryButton title="Testar notificação em 10 segundos" variant="secondary" onPress={testNotification} /></View>
 
         <View style={styles.accountCard}><Text style={styles.accountTitle}>Sessão</Text><Text style={styles.accountText}>O login salvo expira automaticamente após 30 minutos.</Text><PrimaryButton title="Sair da conta" variant="secondary" onPress={() => Alert.alert('Sair da conta', 'Deseja encerrar esta sessão?', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sair', style: 'destructive', onPress: onLogout }])} /></View>
       </ScrollView>

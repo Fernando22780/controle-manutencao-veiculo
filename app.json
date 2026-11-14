@@ -8,15 +8,19 @@
     "newArchEnabled": true,
     "icon": "./assets/app-icon.png",
     "splash": {
-      "backgroundColor": "#071F1B"
+      "image": "./assets/app-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#042D21"
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.controledemanutencaoveiculo.app",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use a biometria para proteger o acesso ao aplicativo."
       }
     },
     "android": {
+      "package": "com.controledemanutencaoveiculo.app",
       "adaptiveIcon": {
         "backgroundColor": "#071F1B",
         "foregroundImage": "./assets/app-icon.png"
@@ -48,7 +52,10 @@
         }
       ],
       "expo-local-authentication",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-splash-screen",
+      "expo-sqlite",
+      "expo-notifications"
     ]
   }
 }

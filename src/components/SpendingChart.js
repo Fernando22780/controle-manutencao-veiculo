@@ -5,7 +5,6 @@ import { formatMoney, formatMoneyShort } from '../maintenanceUtils';
 
 const BAR_AREA = 92;
 
-// Gráfico simples de gastos, feito só com Views (sem biblioteca extra, funciona no Expo Go).
 export default function SpendingChart({ months, services }) {
   const max = Math.max(...months.map((m) => m.total), 1);
   const topService = services[0]?.total || 1;

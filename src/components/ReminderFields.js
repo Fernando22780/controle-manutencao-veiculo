@@ -16,16 +16,15 @@ export function IntervalChips({ label, unit, options, value, onChange }) {
   return <View style={styles.intervalBlock}>
     <Text style={styles.intervalLabel}>{label}</Text>
     <View style={styles.intervalRow}>
-      {options.map((option) => <Chip key={option} label={unit === 'km' ? `${formatKm(option)} km` : `${option} meses`} active={!showCustom && numeric === option} onPress={() => { setCustomMode(false); onChange(String(option)); }} />)}
+      {options.map((option) => <Chip key={option} label={unit === 'km' ? `${formatKm(option)} km` : unit === 'dias' ? `${option} ${option === 1 ? 'dia' : 'dias'}` : `${option} meses`} active={!showCustom && numeric === option} onPress={() => { setCustomMode(false); onChange(String(option)); }} />)}
       <Chip label="Outro" active={showCustom} onPress={() => { setCustomMode(true); if (options.includes(numeric)) onChange(''); }} />
       <Chip label="Nenhum" active={!showCustom && !value} onPress={() => { setCustomMode(false); onChange(''); }} />
     </View>
-    {showCustom ? <TextInput style={styles.input} value={value} onChangeText={(text) => onChange(onlyDigits(text).slice(0, 6))} keyboardType="number-pad" placeholder={unit === 'km' ? 'Quantos km? Ex.: 8000' : 'Quantos meses? Ex.: 4'} placeholderTextColor={COLORS.muted} /> : null}
+    {showCustom ? <TextInput style={styles.input} value={value} onChangeText={(text) => onChange(onlyDigits(text).slice(0, 6))} keyboardType="number-pad" placeholder={unit === 'km' ? 'Quantos km? Ex.: 8000' : unit === 'dias' ? 'Quantos dias? Ex.: 10' : 'Quantos meses? Ex.: 4'} placeholderTextColor={COLORS.muted} /> : null}
   </View>;
 }
 
-// Cartão "Lembrar próxima manutenção" (liga/desliga + prazos + prévia do próximo aviso).
-export function ReminderCard({ on, onToggle, kmInterval, onKmIntervalChange, monthsInterval, onMonthsIntervalChange, preview, needsKm }) {
+export function ReminderCard({ on, onToggle, kmInterval, onKmIntervalChange, daysInterval, onDaysIntervalChange, monthsInterval, onMonthsIntervalChange, reminderTime, onReminderTimeChange, preview, needsKm, onTestNotification }) {
   return <View style={[styles.card, on && styles.cardOn]}>
     <View style={styles.head}>
       <View style={styles.icon}><MaterialCommunityIcons name="bell-ring-outline" size={20} color={COLORS.green} /></View>
@@ -37,9 +36,12 @@ export function ReminderCard({ on, onToggle, kmInterval, onKmIntervalChange, mon
     </View>
     {on ? <>
       <IntervalChips label="Por quilometragem" unit="km" options={[5000, 10000, 15000, 20000]} value={kmInterval} onChange={onKmIntervalChange} />
+      <IntervalChips label="Por dias" unit="dias" options={[1, 7, 15, 30]} value={daysInterval} onChange={onDaysIntervalChange} />
       <IntervalChips label="Por tempo" unit="meses" options={[3, 6, 12]} value={monthsInterval} onChange={onMonthsIntervalChange} />
+      <View style={styles.timeBlock}><Text style={styles.intervalLabel}>Horário do aviso</Text><TextInput style={styles.timeInput} value={reminderTime} onChangeText={onReminderTimeChange} keyboardType="numbers-and-punctuation" placeholder="09:00" placeholderTextColor={COLORS.muted} maxLength={5} /><Text style={styles.timeHint}>O aviso será enviado nesse horário.</Text></View>
       {needsKm ? <Text style={styles.warn}>Preencha o km atual acima para calcular o aviso por quilometragem.</Text> : null}
       {preview && describeNext(preview) ? <View style={styles.preview}><MaterialCommunityIcons name="calendar-check-outline" size={16} color={COLORS.green} /><Text style={styles.previewText}>Próximo aviso: {describeNext(preview)}</Text></View> : null}
+      <Pressable onPress={onTestNotification} style={styles.testButton}><MaterialCommunityIcons name="bell-check-outline" size={16} color={COLORS.green} /><Text style={styles.testText}>Testar aviso no celular em 10 segundos</Text></Pressable>
     </> : null}
   </View>;
 }
@@ -62,4 +64,9 @@ const styles = StyleSheet.create({
   warn: { color: COLORS.amber, fontSize: 11, fontWeight: '800', marginTop: 10, lineHeight: 16 },
   preview: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: COLORS.card, borderRadius: 11, padding: 10, marginTop: 12 },
   previewText: { color: COLORS.green, fontSize: 12, fontWeight: '900', flex: 1 },
+  testButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 11, paddingVertical: 10, borderRadius: 11, borderWidth: 1, borderColor: '#B9E1D0', backgroundColor: COLORS.card },
+  testText: { color: COLORS.green, fontSize: 11, fontWeight: '900' },
+  timeBlock: { marginTop: 12 },
+  timeInput: { width: 110, height: 44, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.card, paddingHorizontal: 12, color: COLORS.text, fontSize: 15, fontWeight: '800' },
+  timeHint: { color: COLORS.muted, fontSize: 10, marginTop: 5 },
 });
