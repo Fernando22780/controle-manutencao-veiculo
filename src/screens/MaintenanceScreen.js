@@ -18,6 +18,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SHADOW, getRecordStatus, getRecordStatusText } from '../theme';
+import { scheduleMaintenanceNotification } from '../notifications';
 import PrimaryButton from '../components/PrimaryButton';
 import CenteredMessage from '../components/CenteredMessage';
 import CalendarPicker from '../components/CalendarPicker';
@@ -52,7 +53,9 @@ import {
   parseMoney,
   sanitizeMoneyInput,
   suggestionFor,
+  normalizeReminderTime,
 } from '../maintenanceUtils';
+import { scheduleTestNotification } from '../notifications';
 
 export default function MaintenanceScreen({ navigation }) {
   const [vehicleId, setVehicleId] = useState(null);
@@ -64,7 +67,9 @@ export default function MaintenanceScreen({ navigation }) {
   const [cost, setCost] = useState('');
   const [reminderOn, setReminderOn] = useState(false);
   const [kmInterval, setKmInterval] = useState('');
+  const [daysInterval, setDaysInterval] = useState('');
   const [monthsInterval, setMonthsInterval] = useState('');
+  const [reminderTime, setReminderTime] = useState('09:00');
   const [historyVehicle, setHistoryVehicle] = useState('all');
   const [historyQuery, setHistoryQuery] = useState('');
   const [records, setRecords] = useState([]);
@@ -77,8 +82,8 @@ export default function MaintenanceScreen({ navigation }) {
 
   useEffect(() => {
     if (!draftReady.current) return;
-    saveMaintenanceDraft({ vehicleId, description, date, km, cost, reminderOn, kmInterval, monthsInterval });
-  }, [vehicleId, description, date, km, cost, reminderOn, kmInterval, monthsInterval]);
+    saveMaintenanceDraft({ vehicleId, description, date, km, cost, reminderOn, kmInterval, daysInterval, monthsInterval, reminderTime });
+  }, [vehicleId, description, date, km, cost, reminderOn, kmInterval, daysInterval, monthsInterval, reminderTime]);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -110,7 +115,9 @@ export default function MaintenanceScreen({ navigation }) {
     setCost(draft?.cost || '');
     setReminderOn(Boolean(draft?.reminderOn));
     setKmInterval(draft?.kmInterval || '');
+    setDaysInterval(draft?.daysInterval || '');
     setMonthsInterval(draft?.monthsInterval || '');
+    setReminderTime(draft?.reminderTime || '09:00');
     draftReady.current = true;
     setLoading(false);
   }
@@ -140,15 +147,16 @@ export default function MaintenanceScreen({ navigation }) {
     const suggestion = suggestionFor(text);
     if (!suggestion) return;
     setKmInterval(suggestion.km ? String(suggestion.km) : '');
+    setDaysInterval('');
     setMonthsInterval(suggestion.months ? String(suggestion.months) : '');
   }
   function pickService(label) {
     setDescription(label);
-    if (reminderOn && !kmInterval && !monthsInterval) applySuggestion(label);
+    if (reminderOn && !kmInterval && !daysInterval && !monthsInterval) applySuggestion(label);
   }
   function toggleReminder(value) {
     setReminderOn(value);
-    if (value && !kmInterval && !monthsInterval) applySuggestion(description);
+    if (value && !kmInterval && !daysInterval && !monthsInterval) applySuggestion(description);
   }
   function confirmAsync(title, message) {
     return new Promise((resolve) => Alert.alert(title, message, [
@@ -173,6 +181,10 @@ export default function MaintenanceScreen({ navigation }) {
       Alert.alert('Data inválida', 'Informe uma data existente no formato DD/MM/AAAA.');
       return;
     }
+    if (reminderOn && !normalizeReminderTime(reminderTime)) {
+      Alert.alert('Horário inválido', 'Informe o horário no formato HH:MM, por exemplo 09:00 ou 18:30.');
+      return;
+    }
     const kmValue = parseKm(km);
     const costValue = parseMoney(cost);
     if (cost.trim() && costValue === null) {
@@ -180,9 +192,10 @@ export default function MaintenanceScreen({ navigation }) {
       return;
     }
     const kmIntervalValue = reminderOn ? parseKm(kmInterval) : null;
+    const daysIntervalValue = reminderOn ? parseKm(daysInterval) : null;
     const monthsIntervalValue = reminderOn ? parseKm(monthsInterval) : null;
-    if (reminderOn && !kmIntervalValue && !monthsIntervalValue) {
-      Alert.alert('Escolha o prazo do lembrete', 'Informe em quantos km ou meses lembrar, ou desligue o lembrete.');
+    if (reminderOn && !kmIntervalValue && !daysIntervalValue && !monthsIntervalValue) {
+      Alert.alert('Escolha o prazo do lembrete', 'Informe em quantos km, dias ou meses lembrar, ou desligue o lembrete.');
       return;
     }
     if (kmIntervalValue && kmValue === null) {
@@ -210,10 +223,12 @@ export default function MaintenanceScreen({ navigation }) {
       date: date.trim(),
       km: kmValue,
       cost: costValue,
-      reminder: reminderOn ? buildReminder({ dateStr: date.trim(), km: kmValue, kmInterval: kmIntervalValue, monthsInterval: monthsIntervalValue }) : null,
+      reminder: reminderOn ? buildReminder({ dateStr: date.trim(), km: kmValue, kmInterval: kmIntervalValue, daysInterval: daysIntervalValue, monthsInterval: monthsIntervalValue, time: reminderTime }) : null,
       location: stagedLocation,
       photo: stagedPhoto,
     };
+    const notificationId = await scheduleMaintenanceNotification({ recordId: record.id, description: record.description, nextDate: record.reminder?.nextDate, time: record.reminder?.time });
+    if (notificationId && record.reminder) record.reminder = { ...record.reminder, notificationId };
     setRecords(await addRecord(record));
     const savedReminder = record.reminder;
     setDescription('');
@@ -222,7 +237,9 @@ export default function MaintenanceScreen({ navigation }) {
     setCost('');
     setReminderOn(false);
     setKmInterval('');
+    setDaysInterval('');
     setMonthsInterval('');
+    setReminderTime('09:00');
     await Promise.all([clearStagingLocation(), clearStagingPhoto(), clearMaintenanceDraft()]);
     draftReady.current = true;
     setStagedLocation(null);
@@ -241,7 +258,7 @@ export default function MaintenanceScreen({ navigation }) {
   const filtering = historyVehicle !== 'all' || historyQuery.trim().length > 0;
   function clearHistoryFilters() { setHistoryVehicle('all'); setHistoryQuery(''); }
 
-  const reminderPreview = reminderOn ? buildReminder({ dateStr: date, km: parseKm(km), kmInterval: parseKm(kmInterval), monthsInterval: parseKm(monthsInterval) }) : null;
+  const reminderPreview = reminderOn ? buildReminder({ dateStr: date, km: parseKm(km), kmInterval: parseKm(kmInterval), daysInterval: parseKm(daysInterval), monthsInterval: parseKm(monthsInterval), time: reminderTime }) : null;
   const needsKmForReminder = reminderOn && Boolean(parseKm(kmInterval)) && parseKm(km) === null;
 
   return (
@@ -293,7 +310,29 @@ export default function MaintenanceScreen({ navigation }) {
                 </View>
               </View>
 
-              <ReminderCard on={reminderOn} onToggle={toggleReminder} kmInterval={kmInterval} onKmIntervalChange={setKmInterval} monthsInterval={monthsInterval} onMonthsIntervalChange={setMonthsInterval} preview={reminderPreview} needsKm={needsKmForReminder} />
+              <ReminderCard
+                on={reminderOn}
+                onToggle={toggleReminder}
+                kmInterval={kmInterval}
+                onKmIntervalChange={setKmInterval}
+                daysInterval={daysInterval}
+                onDaysIntervalChange={setDaysInterval}
+                monthsInterval={monthsInterval}
+                onMonthsIntervalChange={setMonthsInterval}
+                reminderTime={reminderTime}
+                onReminderTimeChange={setReminderTime}
+                preview={reminderPreview}
+                needsKm={needsKmForReminder}
+                onTestNotification={async () => {
+                  const result = await scheduleTestNotification();
+                  const message = result.ok
+                    ? 'Aguarde 10s, a notificação chega em breve.'
+                    : result.reason === 'permission'
+                      ? 'Permita notificações nas configurações do celular e tente novamente.'
+                      : 'O Expo Go deste aparelho não conseguiu agendar a notificação. Feche o Expo Go, abra novamente e tente outra vez.';
+                  Alert.alert(result.ok ? 'Teste agendado' : 'Não foi possível testar', message);
+                }}
+              />
 
               <Text style={styles.attachTitle}>Adicionar ao registro (obrigatório)</Text>
               <View style={styles.attachRow}>
@@ -417,18 +456,22 @@ function CameraModal({ visible, onClose, onSaved }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('back');
   const [cameraRef, setCameraRef] = useState(null);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
 
+  function closeCamera() { setCapturedPhoto(null); onClose(); }
   async function takePicture() {
     if (!cameraRef) return;
-    const result = await cameraRef.takePictureAsync({ quality: 0.8 });
-    if (result?.uri) onSaved(result.uri);
+    try {
+      const result = await cameraRef.takePictureAsync({ quality: 0.8 });
+      if (result?.uri) setCapturedPhoto(result.uri);
+    } catch { Alert.alert('Foto não capturada', 'Tente fotografar o comprovante novamente.'); }
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={closeCamera}>
       <SafeAreaView style={styles.modalScreen}>
-        <ModalHeader title="Foto do comprovante" onClose={onClose} />
-        {!permission ? <CenteredMessage text="Verificando câmera..." /> : !permission.granted ? (
+        <ModalHeader title="Foto do comprovante" onClose={closeCamera} />
+        {capturedPhoto ? <><Image source={{ uri: capturedPhoto }} style={styles.camera} resizeMode="contain" /><Text style={styles.locationHint}>Confira a foto antes de anexar ao registro.</Text><View style={styles.modalActions}><PrimaryButton title="Tirar novamente" variant="secondary" onPress={() => setCapturedPhoto(null)} /><PrimaryButton title="Usar comprovante" onPress={() => { const uri = capturedPhoto; setCapturedPhoto(null); onSaved(uri); }} /></View></> : !permission ? <CenteredMessage text="Verificando câmera..." /> : !permission.granted ? (
           <View style={styles.permission}><Text style={styles.permissionText}>Permita a câmera para fotografar o comprovante.</Text><PrimaryButton title="Permitir câmera" onPress={requestPermission} /></View>
         ) : (
           <>

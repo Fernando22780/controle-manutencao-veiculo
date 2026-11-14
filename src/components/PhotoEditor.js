@@ -9,12 +9,6 @@ const HANDLE_PAD = 28; // metade da área de toque de cada canto
 const MIN_FRAME = 80;
 const OUTPUT_SIZE = 800;
 
-/**
- * Editor de foto de perfil (estilo WhatsApp):
- *  1) Mostra a foto escolhida em prévia circular.
- *  2) "Recortar" (opcional) abre o ajuste com arrastar + pinça.
- *  3) "Concluir" salva a foto (com ou sem recorte).
- */
 export default function PhotoEditor({ visible, uri, saving = false, onCancel, onConfirm }) {
   const [mode, setMode] = useState('preview'); // 'preview' | 'crop'
   const [workingUri, setWorkingUri] = useState(uri);
@@ -95,7 +89,6 @@ function CropStep({ uri, processing, onBack, onDone }) {
     return () => { alive = false; };
   }, [uri]);
 
-  // A foto aparece inteira (contain), com uma margem para os cantos poderem ser tocados nas bordas.
   const img = useMemo(() => {
     if (!nat) return null;
     const sc = Math.min((width - 2 * HANDLE_PAD) / nat.w, (stageH - 2 * HANDLE_PAD) / nat.h);
@@ -142,7 +135,6 @@ function CropStep({ uri, processing, onBack, onDone }) {
             }
             return;
           }
-          // cantos: o canto oposto fica fixo e a moldura continua quadrada
           const right = kind === 'tr' || kind === 'br';
           const bottom = kind === 'bl' || kind === 'br';
           const sx = right ? 1 : -1, sy = bottom ? 1 : -1;

@@ -9,7 +9,6 @@ import { addVehicle, getRecords, getSelectedVehicleId, getVehicles, removeVehicl
 import { belongsToVehicle } from '../maintenanceUtils';
 import { costByService, formatKm, formatKmInput, formatMoney, getCurrentKm, getUpcoming, monthlyCosts, parseKm, sumCost, sumCostMonth } from '../maintenanceUtils';
 import SpendingChart from '../components/SpendingChart';
-import { shareVehicleReport } from '../report';
 
 export default function HomeScreen({ navigation, user }) {
   const [records, setRecords] = useState([]);
@@ -20,7 +19,6 @@ export default function HomeScreen({ navigation, user }) {
   const [loading, setLoading] = useState(true);
   const [kmModal, setKmModal] = useState(false);
   const [kmInput, setKmInput] = useState('');
-  const [reporting, setReporting] = useState(false);
 
   const load = useCallback(async () => {
     const [savedRecords, savedVehicles, selectedId] = await Promise.all([getRecords(), getVehicles(), getSelectedVehicleId()]);
@@ -86,14 +84,6 @@ export default function HomeScreen({ navigation, user }) {
     setKmModal(false);
     await load();
   }
-  async function handleReport() {
-    if (!selectedVehicle || reporting) return;
-    if (!vehicleRecords.length) { Alert.alert('Sem registros', 'Registre ao menos uma manutenção para gerar o relatório.'); return; }
-    setReporting(true);
-    try { await shareVehicleReport({ vehicle: selectedVehicle, records: vehicleRecords, currentKm }); }
-    catch (error) { console.warn('Falha ao gerar o relatório:', error); Alert.alert('Não foi possível gerar o PDF', 'Tente novamente em instantes.'); }
-    finally { setReporting(false); }
-  }
   function openRecord(record) { navigation.navigate('RecordDetail', { record }); }
   function startMaintenance() { navigation.navigate('Manutenções'); }
 
@@ -152,7 +142,6 @@ export default function HomeScreen({ navigation, user }) {
           <MaterialCommunityIcons name="chevron-right" size={22} color={COLORS.muted} />
         </Pressable>;
       }) : <View style={styles.emptyActivity}><MaterialCommunityIcons name="clipboard-text-clock-outline" size={28} color={COLORS.green} /><Text style={styles.emptyActivityTitle}>Sem atividades recentes</Text><Text style={styles.emptyActivityText}>{selectedVehicle ? 'Os serviços deste veículo vão aparecer aqui.' : 'Cadastre um veículo para começar o histórico.'}</Text>{selectedVehicle ? <Pressable onPress={startMaintenance} style={styles.startLink}><Text style={styles.startLinkText}>Registar primeira manutenção</Text><MaterialCommunityIcons name="arrow-right" size={16} color={COLORS.green} /></Pressable> : null}</View>}
-      {selectedVehicle && vehicleRecords.length ? <View style={{ marginTop: 6 }}><PrimaryButton title={reporting ? 'Gerando PDF…' : 'Gerar relatório em PDF'} variant="secondary" onPress={handleReport} disabled={reporting} /></View> : null}
       <View style={styles.tipCard}><MaterialCommunityIcons name="lightbulb-on-outline" size={21} color={COLORS.green} /><Text style={styles.tipText}>Os seus veículos ficam cadastrados uma única vez. Cada manutenção é associada ao carro selecionado.</Text></View>
     </ScrollView>
     <Modal visible={kmModal} transparent animationType="fade" onRequestClose={() => setKmModal(false)}>

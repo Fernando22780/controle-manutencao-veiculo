@@ -1,7 +1,4 @@
-// Funções de apoio para km, valor e lembretes de manutenção.
-// Tudo aqui é puro (sem acesso a storage), então é fácil de testar e de reaproveitar no Firebase.
 
-// ---------- Datas (DD/MM/AAAA) ----------
 export function parseDateBR(value) {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value || '');
   if (!m) return null;
@@ -9,7 +6,14 @@ export function parseDateBR(value) {
   const valid = d.getFullYear() === Number(m[3]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[1]);
   return valid ? d : null;
 }
-// Data válida no formato DD/MM/AAAA, entre 1900 e o ano atual (mesma regra do cadastro).
+export function normalizeReminderTime(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
 export function isValidDateBR(value) {
   const d = parseDateBR(value);
   return Boolean(d) && d.getFullYear() >= 1900 && d.getFullYear() <= new Date().getFullYear();
@@ -17,17 +21,20 @@ export function isValidDateBR(value) {
 export function formatDateBR(date) {
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 }
-// Soma meses sem "pular" de mês (31/08 + 6 meses = 28/02, e não 03/03).
 export function addMonths(date, months) {
   const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(date.getDate(), lastDay));
   return target;
 }
+export function addDays(date, days) {
+  const target = new Date(date);
+  target.setDate(target.getDate() + days);
+  return target;
+}
 function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 export function daysBetween(from, to) { return Math.round((startOfDay(to) - startOfDay(from)) / 86400000); }
 
-// ---------- Km ----------
 export function onlyDigits(value) { return String(value ?? '').replace(/\D/g, ''); }
 export function parseKm(value) {
   const digits = onlyDigits(value);
@@ -39,16 +46,15 @@ export function formatKm(n) {
   if (n === null || n === undefined || n === '') return '';
   return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
-// Máscara enquanto digita: 45200 -> 45.200
 export function formatKmInput(value) {
   const digits = onlyDigits(value).slice(0, 7);
   return digits ? formatKm(parseInt(digits, 10)) : '';
 }
 
-// ---------- Dinheiro (R$) ----------
-// Aceita "280", "280,5", "1.250,00" e "1250.50". Devolve número ou null.
 export function parseMoney(value) {
-  let t = String(value ?? '').replace(/[^\d.,]/g, '');
+  const raw = String(value ?? '');
+  if (raw.includes('-')) return null;
+  let t = raw.replace(/[^\d.,]/g, '');
   if (!t) return null;
   if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
   else if (!(/^\d+\.\d{1,2}$/.test(t))) t = t.replace(/\./g, '');
@@ -60,7 +66,6 @@ export function formatMoney(value) {
   const [int, dec] = v.toFixed(2).split('.');
   return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`;
 }
-// Deixa digitar só números e uma vírgula com até 2 casas.
 export function sanitizeMoneyInput(value) {
   let t = String(value ?? '').replace(/[^\d,]/g, '');
   const first = t.indexOf(',');
@@ -68,7 +73,6 @@ export function sanitizeMoneyInput(value) {
   return t.slice(0, 11);
 }
 
-// ---------- Tipos de serviço e sugestões ----------
 export const SERVICE_TYPES = [
   { label: 'Troca de óleo', km: 10000, months: 6 },
   { label: 'Revisão', km: 10000, months: 12 },
@@ -92,29 +96,29 @@ export function suggestionFor(description) {
   return null;
 }
 
-// ---------- Lembretes ----------
-// reminder = { kmInterval, monthsInterval, nextKm, nextDate }  (tudo opcional)
-export function buildReminder({ dateStr, km, kmInterval, monthsInterval }) {
+export function buildReminder({ dateStr, km, kmInterval, daysInterval, monthsInterval, time = '09:00' }) {
   const kmI = kmInterval > 0 ? kmInterval : null;
+  const daysI = daysInterval > 0 ? daysInterval : null;
   const monthsI = monthsInterval > 0 ? monthsInterval : null;
-  if (!kmI && !monthsI) return null;
+  if (!kmI && !daysI && !monthsI) return null;
   const base = parseDateBR(dateStr);
   return {
     kmInterval: kmI,
+    daysInterval: daysI,
     monthsInterval: monthsI,
+    time: normalizeReminderTime(time) || '09:00',
     nextKm: kmI && km !== null && km !== undefined ? km + kmI : null,
-    nextDate: monthsI && base ? formatDateBR(addMonths(base, monthsI)) : null,
+    nextDate: base && (daysI || monthsI) ? formatDateBR(addDays(addMonths(base, monthsI || 0), daysI || 0)) : null,
   };
 }
 export function describeNext(reminder) {
   if (!reminder) return '';
   const parts = [];
   if (reminder.nextKm) parts.push(`aos ${formatKm(reminder.nextKm)} km`);
-  if (reminder.nextDate) parts.push(`em ${reminder.nextDate}`);
+  if (reminder.nextDate) parts.push(`em ${reminder.nextDate} às ${reminder.time || '09:00'}`);
   return parts.join(' ou ');
 }
 
-// Km atual do veículo = maior valor entre o que a pessoa atualizou na Início e os km dos registros.
 export function getCurrentKm(vehicle, records) {
   const values = [];
   if (vehicle?.currentKm !== null && vehicle?.currentKm !== undefined) values.push(Number(vehicle.currentKm));
@@ -126,8 +130,6 @@ export function getCurrentKm(vehicle, records) {
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 const plural = (n, one, many) => (n === 1 ? one : many);
 
-// Para cada serviço (ex.: "troca de óleo") vale só o lembrete do registro MAIS RECENTE,
-// assim, depois de trocar o óleo de novo, o aviso antigo some.
 export function getUpcoming(records, currentKm, today = new Date()) {
   const latest = new Map();
   (records || []).forEach((r) => {
@@ -178,7 +180,6 @@ export function getUpcoming(records, currentKm, today = new Date()) {
   return items.sort((a, b) => order[a.status] - order[b.status] || b.progress - a.progress);
 }
 
-// ---------- Totais ----------
 export function sumCost(records) {
   return (records || []).reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
 }
@@ -189,13 +190,10 @@ export function sumCostMonth(records, today = new Date()) {
   }, 0);
 }
 
-// ---------- Filtro e busca do histórico ----------
-// Registros antigos (sem vehicleId) são ligados ao veículo pelo nome, igual à tela Início.
 export function belongsToVehicle(record, vehicle) {
   if (!vehicle) return false;
   return record.vehicleId === vehicle.id || (!record.vehicleId && Boolean(record.vehicle) && record.vehicle === vehicle.name);
 }
-// vehicleId: 'all' ou o id do veículo. query: texto livre (serviço, veículo, placa ou data).
 export function filterRecords(records, vehicles, { vehicleId = 'all', query = '' } = {}) {
   const vehicle = vehicleId === 'all' ? null : (vehicles || []).find((item) => item.id === vehicleId) || null;
   const tokens = normalizeService(query).split(' ').filter(Boolean);
@@ -207,9 +205,7 @@ export function filterRecords(records, vehicles, { vehicleId = 'all', query = ''
   });
 }
 
-// ---------- Gráficos de gastos ----------
 const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-// Gasto de cada um dos últimos `count` meses (o mês atual é o último).
 export function monthlyCosts(records, today = new Date(), count = 6) {
   const months = [];
   for (let i = count - 1; i >= 0; i -= 1) {
@@ -225,7 +221,6 @@ export function monthlyCosts(records, today = new Date(), count = 6) {
   });
   return months;
 }
-// Serviços em que mais se gastou (agrupa "Troca de óleo" e "troca de oleo" como o mesmo).
 export function costByService(records, limit = 3) {
   const groups = new Map();
   (records || []).forEach((record) => {
@@ -239,7 +234,6 @@ export function costByService(records, limit = 3) {
   });
   return [...groups.values()].sort((a, b) => b.total - a.total).slice(0, limit);
 }
-// 1800 -> "1,8 mil" | 480 -> "480" (cabe em cima da barra do gráfico)
 export function formatMoneyShort(value) {
   const v = Number(value) || 0;
   if (v >= 1000) return `${(v / 1000).toFixed(1).replace('.', ',').replace(',0', '')} mil`;

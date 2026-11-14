@@ -6,11 +6,11 @@ import { COLORS } from '../theme';
 import PrimaryButton from './PrimaryButton';
 import CalendarPicker from './CalendarPicker';
 import { Chip, ReminderCard } from './ReminderFields';
-import { SERVICE_TYPES, buildReminder, formatKm, formatKmInput, isValidDateBR, parseKm, parseMoney, sanitizeMoneyInput, suggestionFor } from '../maintenanceUtils';
+import { SERVICE_TYPES, buildReminder, formatKm, formatKmInput, isValidDateBR, normalizeReminderTime, parseKm, parseMoney, sanitizeMoneyInput, suggestionFor } from '../maintenanceUtils';
+import { scheduleTestNotification } from '../notifications';
 
 const moneyToText = (value) => (value === null || value === undefined ? '' : String(value.toFixed ? value.toFixed(2) : value).replace('.', ','));
 
-// Edita serviço, data, km, valor e lembrete de um registro que já foi salvo.
 export default function EditRecordModal({ visible, record, onClose, onSaved }) {
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
@@ -18,7 +18,9 @@ export default function EditRecordModal({ visible, record, onClose, onSaved }) {
   const [cost, setCost] = useState('');
   const [reminderOn, setReminderOn] = useState(false);
   const [kmInterval, setKmInterval] = useState('');
+  const [daysInterval, setDaysInterval] = useState('');
   const [monthsInterval, setMonthsInterval] = useState('');
+  const [reminderTime, setReminderTime] = useState('09:00');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -29,7 +31,9 @@ export default function EditRecordModal({ visible, record, onClose, onSaved }) {
     setCost(moneyToText(record.cost));
     setReminderOn(Boolean(record.reminder));
     setKmInterval(record.reminder?.kmInterval ? String(record.reminder.kmInterval) : '');
+    setDaysInterval(record.reminder?.daysInterval ? String(record.reminder.daysInterval) : '');
     setMonthsInterval(record.reminder?.monthsInterval ? String(record.reminder.monthsInterval) : '');
+    setReminderTime(record.reminder?.time || '09:00');
     setSaving(false);
   }, [visible, record]);
 
@@ -37,24 +41,27 @@ export default function EditRecordModal({ visible, record, onClose, onSaved }) {
     const suggestion = suggestionFor(text);
     if (!suggestion) return;
     setKmInterval(suggestion.km ? String(suggestion.km) : '');
+    setDaysInterval('');
     setMonthsInterval(suggestion.months ? String(suggestion.months) : '');
   }
-  function pickService(label) { setDescription(label); if (reminderOn && !kmInterval && !monthsInterval) applySuggestion(label); }
-  function toggleReminder(value) { setReminderOn(value); if (value && !kmInterval && !monthsInterval) applySuggestion(description); }
+  function pickService(label) { setDescription(label); if (reminderOn && !kmInterval && !daysInterval && !monthsInterval) applySuggestion(label); }
+  function toggleReminder(value) { setReminderOn(value); if (value && !kmInterval && !daysInterval && !monthsInterval) applySuggestion(description); }
 
   const kmValue = parseKm(km);
-  const preview = reminderOn ? buildReminder({ dateStr: date, km: kmValue, kmInterval: parseKm(kmInterval), monthsInterval: parseKm(monthsInterval) }) : null;
+  const preview = reminderOn ? buildReminder({ dateStr: date, km: kmValue, kmInterval: parseKm(kmInterval), daysInterval: parseKm(daysInterval), monthsInterval: parseKm(monthsInterval), time: reminderTime }) : null;
   const needsKm = reminderOn && Boolean(parseKm(kmInterval)) && kmValue === null;
 
   async function save() {
     if (saving) return;
     if (!description.trim()) { Alert.alert('Informe o serviço', 'Digite o nome do serviço realizado.'); return; }
     if (!isValidDateBR(date.trim())) { Alert.alert('Data inválida', 'Escolha uma data no calendário.'); return; }
+    if (reminderOn && !normalizeReminderTime(reminderTime)) { Alert.alert('Horário inválido', 'Informe o horário no formato HH:MM, por exemplo 09:00 ou 18:30.'); return; }
     const costValue = parseMoney(cost);
     if (cost.trim() && costValue === null) { Alert.alert('Valor inválido', 'Digite o valor pago, por exemplo 280,00.'); return; }
     const kmIntervalValue = reminderOn ? parseKm(kmInterval) : null;
+    const daysIntervalValue = reminderOn ? parseKm(daysInterval) : null;
     const monthsIntervalValue = reminderOn ? parseKm(monthsInterval) : null;
-    if (reminderOn && !kmIntervalValue && !monthsIntervalValue) { Alert.alert('Escolha o prazo do lembrete', 'Informe em quantos km ou meses lembrar, ou desligue o lembrete.'); return; }
+    if (reminderOn && !kmIntervalValue && !daysIntervalValue && !monthsIntervalValue) { Alert.alert('Escolha o prazo do lembrete', 'Informe em quantos km, dias ou meses lembrar, ou desligue o lembrete.'); return; }
     if (kmIntervalValue && kmValue === null) { Alert.alert('Informe o km atual', 'Para lembrar por quilometragem, preencha o km do serviço.'); return; }
     setSaving(true);
     try {
@@ -63,7 +70,7 @@ export default function EditRecordModal({ visible, record, onClose, onSaved }) {
         date: date.trim(),
         km: kmValue,
         cost: costValue,
-        reminder: reminderOn ? buildReminder({ dateStr: date.trim(), km: kmValue, kmInterval: kmIntervalValue, monthsInterval: monthsIntervalValue }) : null,
+        reminder: reminderOn ? buildReminder({ dateStr: date.trim(), km: kmValue, kmInterval: kmIntervalValue, daysInterval: daysIntervalValue, monthsInterval: monthsIntervalValue, time: reminderTime }) : null,
       });
     } finally { setSaving(false); }
   }
@@ -96,7 +103,7 @@ export default function EditRecordModal({ visible, record, onClose, onSaved }) {
             </View>
           </View>
 
-          <ReminderCard on={reminderOn} onToggle={toggleReminder} kmInterval={kmInterval} onKmIntervalChange={setKmInterval} monthsInterval={monthsInterval} onMonthsIntervalChange={setMonthsInterval} preview={preview} needsKm={needsKm} />
+          <ReminderCard on={reminderOn} onToggle={toggleReminder} kmInterval={kmInterval} onKmIntervalChange={setKmInterval} daysInterval={daysInterval} onDaysIntervalChange={setDaysInterval} monthsInterval={monthsInterval} onMonthsIntervalChange={setMonthsInterval} reminderTime={reminderTime} onReminderTimeChange={setReminderTime} preview={preview} needsKm={needsKm} onTestNotification={async () => { const result = await scheduleTestNotification(); Alert.alert(result.ok ? 'Teste agendado' : 'Permissão necessária', result.ok ? 'Bloqueie a tela e aguarde 10 segundos.' : 'Permita notificações nas configurações do celular.'); }} />
 
           <View style={{ height: 18 }} />
           <PrimaryButton title={saving ? 'Salvando…' : 'Salvar alterações'} onPress={save} disabled={saving} />
